@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"net/url"
 	"strconv"
 
@@ -215,6 +216,20 @@ type Config struct {
 
 	// print version if set true
 	PrintVersion bool
+
+	// check data filter rules
+	DataFilters []DataFilter `toml:"data-filters" json:"data-filters"`
+}
+
+//
+type DataFilter struct {
+	// the match pattern of tables, the supported regexp pattern is the same as table-filter
+	Pattern string `toml:"pattern" json:"pattern"`
+	// columns be ignored, will not check this column's data
+	IgnoreColumns []string `toml:"ignore-columns"`
+	// select range, for example: "age > 10 AND age < 20"
+	Range string `toml:"range"`
+
 }
 
 // NewConfig creates a new config.
@@ -369,6 +384,13 @@ func (c *Config) checkConfig() bool {
 		if len(c.FixSQLFile) == 0 {
 			log.Warn("fix-sql-file is invalid, will use default value 'fix.sql'")
 			c.FixSQLFile = "fix.sql"
+		}
+	}
+
+	for _, f := range c.DataFilters {
+		if _, err := filter.Parse([]string{f.Pattern}); err != nil {
+			log.Error("invalid data-filters.pattern", zap.Error(err))
+			return false
 		}
 	}
 

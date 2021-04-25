@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	table_filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	tidbconfig "github.com/pingcap/tidb/config"
@@ -362,6 +363,20 @@ func (df *Diff) AdjustTableConfig(cfg *Config) (err error) {
 		}
 	}
 
+	type tableDataFilter struct {
+		filter     table_filter.Filter
+		dataFilter DataFilter
+	}
+
+	filters := make([]tableDataFilter, len(cfg.DataFilters))
+	for _, f := range cfg.DataFilters {
+		filter, err := table_filter.Parse([]string{f.Pattern})
+		if err != nil {
+			return errors.Trace(err)
+		}
+		filters = append(filters, tableDataFilter{filter: filter, dataFilter: f})
+	}
+
 	for _, table := range cfg.TableCfgs {
 		if _, ok := df.tables[table.Schema]; !ok {
 			return errors.NotFoundf("schema %s in check tables", table.Schema)
@@ -402,6 +417,19 @@ func (df *Diff) AdjustTableConfig(cfg *Config) (err error) {
 			df.tables[table.Schema][table.Table].Range = table.Range
 		}
 		df.tables[table.Schema][table.Table].IgnoreColumns = table.IgnoreColumns
+		if table.Range == "" || len(table.IgnoreColumns) == 0 {
+			for _, f := range filters {
+				if f.filter.MatchTable(table.Schema, table.Table) {
+					if table.Range == "" {
+						df.tables[table.Schema][table.Table].Range = table.Range
+					}
+					if len(table.IgnoreColumns) == 0 {
+						df.tables[table.Schema][table.Table].IgnoreColumns = table.IgnoreColumns
+					}
+					break
+				}
+			}
+		}
 		df.tables[table.Schema][table.Table].Fields = table.Fields
 		df.tables[table.Schema][table.Table].Collation = table.Collation
 	}
