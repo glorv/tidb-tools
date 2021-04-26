@@ -17,7 +17,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"net/url"
 	"strconv"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"go.uber.org/zap"
 )

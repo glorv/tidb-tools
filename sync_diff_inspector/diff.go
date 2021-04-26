@@ -301,6 +301,20 @@ func (df *Diff) AdjustTableConfig(cfg *Config) (err error) {
 		}
 	}
 
+	type tableDataFilter struct {
+		filter     table_filter.Filter
+		dataFilter DataFilter
+	}
+
+	filters := make([]*tableDataFilter, 0, len(cfg.DataFilters))
+	for _, f := range cfg.DataFilters {
+		filter, err := table_filter.Parse([]string{f.Pattern})
+		if err != nil {
+			return errors.Trace(err)
+		}
+		filters = append(filters, &tableDataFilter{filter: filter, dataFilter: f})
+	}
+
 	// fill the table information.
 	// will add default source information, don't worry, we will use table config's info replace this later.
 	for _, schemaTables := range cfg.Tables {
@@ -351,7 +365,7 @@ func (df *Diff) AdjustTableConfig(cfg *Config) (err error) {
 				})
 			}
 
-			df.tables[schemaTables.Schema][tableName] = &TableConfig{
+			tblCfg := &TableConfig{
 				TableInstance: TableInstance{
 					Schema: schemaTables.Schema,
 					Table:  tableName,
@@ -360,21 +374,22 @@ func (df *Diff) AdjustTableConfig(cfg *Config) (err error) {
 				Range:           "TRUE",
 				SourceTables:    sourceTables,
 			}
-		}
-	}
 
-	type tableDataFilter struct {
-		filter     table_filter.Filter
-		dataFilter DataFilter
-	}
+			for _, f := range filters {
+				if f.filter.MatchTable(schemaTables.Schema, tableName) {
+					if f.dataFilter.Range != "" {
+						tblCfg.Range = f.dataFilter.Range
+					}
 
-	filters := make([]tableDataFilter, len(cfg.DataFilters))
-	for _, f := range cfg.DataFilters {
-		filter, err := table_filter.Parse([]string{f.Pattern})
-		if err != nil {
-			return errors.Trace(err)
+					if len(f.dataFilter.IgnoreColumns) != 0 {
+						tblCfg.IgnoreColumns = f.dataFilter.IgnoreColumns
+					}
+					break
+				}
+			}
+
+			df.tables[schemaTables.Schema][tableName] = tblCfg
 		}
-		filters = append(filters, tableDataFilter{filter: filter, dataFilter: f})
 	}
 
 	for _, table := range cfg.TableCfgs {
@@ -415,21 +430,10 @@ func (df *Diff) AdjustTableConfig(cfg *Config) (err error) {
 		}
 		if table.Range != "" {
 			df.tables[table.Schema][table.Table].Range = table.Range
+		} else {
+			df.tables[table.Schema][table.Table].Range = "TRUE"
 		}
 		df.tables[table.Schema][table.Table].IgnoreColumns = table.IgnoreColumns
-		if table.Range == "" || len(table.IgnoreColumns) == 0 {
-			for _, f := range filters {
-				if f.filter.MatchTable(table.Schema, table.Table) {
-					if table.Range == "" {
-						df.tables[table.Schema][table.Table].Range = table.Range
-					}
-					if len(table.IgnoreColumns) == 0 {
-						df.tables[table.Schema][table.Table].IgnoreColumns = table.IgnoreColumns
-					}
-					break
-				}
-			}
-		}
 		df.tables[table.Schema][table.Table].Fields = table.Fields
 		df.tables[table.Schema][table.Table].Collation = table.Collation
 	}
